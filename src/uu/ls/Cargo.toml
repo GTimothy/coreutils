@@ -18,7 +18,6 @@ path = "src/ls.rs"
 
 [dependencies]
 ansi-width = { workspace = true }
-chrono = { workspace = true }
 clap = { workspace = true, features = ["env"] }
 glob = { workspace = true }
 hostname = { workspace = true }
@@ -27,6 +26,7 @@ number_prefix = { workspace = true }
 selinux = { workspace = true, optional = true }
 terminal_size = { workspace = true }
 thiserror = { workspace = true }
+time = {workspace = true, features = ["macros","formatting"]}
 uucore = { workspace = true, features = [
   "colors",
   "custom-tz-fmt",

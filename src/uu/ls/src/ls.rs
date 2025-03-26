@@ -26,7 +26,7 @@ use std::{
 use std::{collections::HashSet, io::IsTerminal};
 
 use ansi_width::ansi_width;
-use chrono::{DateTime, Local, TimeDelta};
+// use chrono::{DateTime, Local, TimeDelta};
 use clap::{
     Arg, ArgAction, Command,
     builder::{NonEmptyStringValueParser, PossibleValue, ValueParser},
@@ -57,7 +57,7 @@ use uucore::libc::{dev_t, major, minor};
 use uucore::line_ending::LineEnding;
 use uucore::quoting_style::{self, QuotingStyle, escape_name};
 use uucore::{
-    custom_tz_fmt,
+    // custom_tz_fmt,
     display::Quotable,
     error::{UError, UResult, set_exit_code},
     format_usage,
@@ -271,30 +271,60 @@ enum TimeStyle {
 }
 
 /// Whether the given date is considered recent (i.e., in the last 6 months).
-fn is_recent(time: DateTime<Local>) -> bool {
+fn is_recent(time: SystemTime) -> bool {
     // According to GNU a Gregorian year has 365.2425 * 24 * 60 * 60 == 31556952 seconds on the average.
-    time + TimeDelta::try_seconds(31_556_952 / 2).unwrap() > Local::now()
+    time + Duration::from_secs(31_556_952 / 2) > std::time::SystemTime::now()
 }
-
+use time::macros::format_description;
+use time::{OffsetDateTime, format_description};
 impl TimeStyle {
     /// Format the given time according to this time format style.
-    fn format(&self, time: DateTime<Local>) -> String {
+    fn format(&self, time: SystemTime) -> String {
         let recent = is_recent(time);
+        let ttime: OffsetDateTime = time.into();
+        const FULLISOFORMAT: time::format_description::well_known::Iso8601<
+            6651332276412969266533270467398074368,
+        > = format_description::well_known::Iso8601::DEFAULT;
+        // const FULLISOFORMAT: &[time::format_description::BorrowedFormatItem<'_>] = format_description!("[month]-[day] [hour]:[minute]...
+        // const LONGISOFORMAT: &[time::format_description::BorrowedFormatItem<'_>] = format_description::well_known::Iso8601::DATE_TIME;
+        const LONGISOFORMAT: &[time::format_description::BorrowedFormatItem<'_>] =
+            format_description!("[year]-[month]-[day] [hour]:[minute]");
+        const RECENTISOFORMAT: &[time::format_description::BorrowedFormatItem<'_>] =
+            format_description!("[month]-[day] [hour]:[minute]");
+        const OLDISOFORMAT: &[time::format_description::BorrowedFormatItem<'_>] =
+            format_description!("[year]-[month]-[day] ");
+        const RECENTLOCFORMAT: &[time::format_description::BorrowedFormatItem<'_>] =
+            format_description!("[month repr:short] [day padding:space] [hour]:[minute]");
+        const OLDLOCFORMAT: &[time::format_description::BorrowedFormatItem<'_>] =
+            format_description!("[month repr:short] [day padding:space]  [year]");
+        // const STRFFORMAT: &[time::format_description::BorrowedFormatItem<'_>] = format_description!("[year]-[month]-[day]");
         match (self, recent) {
-            (Self::FullIso, _) => time.format("%Y-%m-%d %H:%M:%S.%f %z").to_string(),
-            (Self::LongIso, _) => time.format("%Y-%m-%d %H:%M").to_string(),
-            (Self::Iso, true) => time.format("%m-%d %H:%M").to_string(),
-            (Self::Iso, false) => time.format("%Y-%m-%d ").to_string(),
+            (Self::FullIso, _) => ttime
+                .format(&FULLISOFORMAT)
+                .expect("the time should format fine"),
+            (Self::LongIso, _) => ttime
+                .format(&LONGISOFORMAT)
+                .expect("the time should format fine"),
+            (Self::Iso, true) => ttime
+                .format(&RECENTISOFORMAT)
+                .expect("the time should format fine"),
+            (Self::Iso, false) => ttime
+                .format(&OLDISOFORMAT)
+                .expect("the time should format fine"),
             // spell-checker:ignore (word) datetime
             //In this version of chrono translating can be done
             //The function is chrono::datetime::DateTime::format_localized
             //However it's currently still hard to get the current pure-rust-locale
             //So it's not yet implemented
-            (Self::Locale, true) => time.format("%b %e %H:%M").to_string(),
-            (Self::Locale, false) => time.format("%b %e  %Y").to_string(),
-            (Self::Format(fmt), _) => time
-                .format(custom_tz_fmt::custom_time_format(fmt).as_str())
-                .to_string(),
+            (Self::Locale, true) => ttime
+                .format(&RECENTLOCFORMAT)
+                .expect("the time should format fine"),
+            (Self::Locale, false) => ttime
+                .format(&OLDLOCFORMAT)
+                .expect("the time should format fine"),
+            (Self::Format(fmt), _) => ttime
+                .format(&time::format_description::parse_strftime_borrowed(fmt).unwrap())
+                .expect("assuming fmt is fine, then this should format fine"),
         }
     }
 }
@@ -3071,9 +3101,9 @@ fn get_system_time(md: &Metadata, config: &Config) -> Option<SystemTime> {
     }
 }
 
-fn get_time(md: &Metadata, config: &Config) -> Option<chrono::DateTime<chrono::Local>> {
+fn get_time(md: &Metadata, config: &Config) -> Option<SystemTime> {
     let time = get_system_time(md, config)?;
-    Some(time.into())
+    Some(time)
 }
 
 fn display_date(metadata: &Metadata, config: &Config) -> String {
